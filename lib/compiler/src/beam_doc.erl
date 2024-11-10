@@ -29,7 +29,7 @@
 -module(beam_doc).
 -moduledoc false.
 
--export([main/4, format_error/1]).
+-export([main/4, main/5, format_error/1]).
 
 -import(lists, [foldl/3, all/2, map/2, filter/2, reverse/1, join/2, filtermap/2,
                 uniq/2, member/2, flatten/1]).
@@ -100,6 +100,11 @@
 
                % keeps track of `-compile(export_all)`
                export_all         = false :: boolean(),
+
+               % Extract documentation also for private functions, not only exported ones.
+               % Used by language servers and IDEs to present documentation for internal functions
+               % for features such as auto-completion and documentation on hover.
+               extract_all        = false :: boolean(),
 
                %% signatures: used to create signatures from it.
                signatures = #{} :: #{{FunName    :: atom(), Arity      :: non_neg_integer()}
@@ -228,6 +233,7 @@
 -type opt() :: warn_missing_doc | warn_missing_doc_functions | warn_missing_doc_callbacks | warn_missing_doc_types |
                nowarn_missing_doc | nowarn_missing_doc_functions | nowarn_missing_doc_callbacks | nowarn_missing_doc_types |
                nowarn_hidden_doc | {nowarn_hidden_doc, {atom(), arity()}}.
+-type doc_opts() :: #{extract_all := boolean()}.
 -type kfa() :: {Kind :: function | type | callback, Name :: atom(), Arity :: arity()}.
 -type warnings() :: [{file:filename(),
                       [{erl_anno:location(), beam_doc, warning()}]}].
@@ -241,8 +247,17 @@ Transforms an Erlang abstract syntax form into EEP-48 documentation format.
 -spec main(file:filename(), file:filename(), [erl_parse:abstract_form()], [opt()]) ->
           {ok, #docs_v1{}, warnings()} | {error, no_docs}.
 main(Dirname, Filename, AST, CmdLineOpts) ->
+    DocOpts = #{extract_all => false},
+    main(Dirname, Filename, AST, CmdLineOpts, DocOpts).
+
+-doc "
+Transforms an Erlang abstract syntax form into EEP-48 documentation format.
+".
+-spec main(file:filename(), file:filename(), [erl_parse:abstract_form()], [opt()], doc_opts()) ->
+          {ok, #docs_v1{}, warnings()} | {error, no_docs}.
+main(Dirname, Filename, AST, CmdLineOpts, DocOpts) ->
     Opts = extract_opts(AST, CmdLineOpts),
-    State0 = new_state(Dirname, Filename, Opts),
+    State0 = new_state(Dirname, Filename, Opts, DocOpts),
     State1 = preprocessing(AST, State0),
     if State1#docs.has_docs orelse Opts =/= [] ->
             Docs = extract_documentation(AST, State1),
@@ -640,11 +655,12 @@ create_module_doc(Lang, ModuleDoc) ->
     #{Lang => ModuleDoc}.
 
 -spec new_state(Dirname :: file:filename(), Filename :: file:filename(),
-                Opts :: [opt()]) -> internal_docs().
-new_state(Dirname, Filename, Opts) ->
+                Opts :: [opt()], doc_opts()) -> internal_docs().
+new_state(Dirname, Filename, Opts, #{extract_all := ExtractAll} = _DocOpts) ->
     DocsV1 = #docs_v1{},
     reset_state(#docs{cwd = Dirname, filename = Filename,
                       curr_filename = Filename, opts = Opts,
+                      extract_all = ExtractAll,
                       moduledoc_meta = DocsV1#docs_v1.metadata}).
 
 
@@ -731,6 +747,9 @@ update_export_types(State, ExportedTypes) ->
 
 update_export_all(State, ExportAll) ->
     State#docs{ export_all = ExportAll }.
+
+update_extract_all(State, ExtractAll) ->
+    State#docs{ extract_all = ExtractAll }.
 
 remove_exported_type_info(Key, #docs{docs = Docs}=State) ->
    {Status, Doc, Meta} = maps:get(Key, Docs),
@@ -881,13 +900,13 @@ extract_documentation0({attribute, _Anno, callback, {{CB, A}, _Form}}=AST, State
 extract_documentation0(_, State) ->
     State.
 
-is_exported(FA, #docs{exported_functions = ExpFuns, export_all = ExportAll}) ->
-  sets:is_element(FA, ExpFuns) orelse ExportAll.
+should_extract_docs(FA, #docs{exported_functions = ExpFuns, export_all = ExportAll, extract_all = ExtractAll}) ->
+  sets:is_element(FA, ExpFuns) orelse ExportAll orelse ExtractAll.
 
 extract_documentation_spec({attribute, Anno, spec, {{Name,Arity}, SpecTypes}}, State) ->
 %% this is because public functions may use private types and these private
 %% types need to be included in the beam and documentation.
-   case is_exported({Name, Arity}, State) of
+   case should_extract_docs({Name, Arity}, State) of
       true ->
          add_user_types(Anno, SpecTypes, State);
       false ->
@@ -985,7 +1004,7 @@ add_last_read_user_type(_Anno, {_TypeName, TypeDef, TypeArgs}, State) ->
 %%       and functions always need to reset the state when they finish, so that new
 %%       new AST items start with a clean slate.
 extract_documentation_from_funs({function, Anno, F, A, [{clause, _, ClauseArgs, _, _}]}, State) ->
-    case is_exported({F, A}, State) of
+    case should_extract_docs({F, A}, State) of
        true ->
           gen_doc_with_signature({function, Anno, F, A, ClauseArgs}, State);
        false ->
@@ -993,7 +1012,7 @@ extract_documentation_from_funs({function, Anno, F, A, [{clause, _, ClauseArgs, 
     end;
 extract_documentation_from_funs({function, _Anno0, F, A, _Body}=AST, State) ->
    {Doc1, Anno1} = fetch_doc_and_anno(State, AST),
-   case is_exported({F, A}, State) of
+   case should_extract_docs({F, A}, State) of
       true ->
          {Signature, DocsWithoutSignature} = extract_signature(Doc1, State, F, A),
          AttrBody = {function, F, A},
