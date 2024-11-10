@@ -881,11 +881,13 @@ extract_documentation0({attribute, _Anno, callback, {{CB, A}, _Form}}=AST, State
 extract_documentation0(_, State) ->
     State.
 
+is_exported(FA, #docs{exported_functions = ExpFuns, export_all = ExportAll}) ->
+  sets:is_element(FA, ExpFuns) orelse ExportAll.
 
-extract_documentation_spec({attribute, Anno, spec, {{Name,Arity}, SpecTypes}}, #docs{exported_functions = ExpFuns}=State) ->
+extract_documentation_spec({attribute, Anno, spec, {{Name,Arity}, SpecTypes}}, State) ->
 %% this is because public functions may use private types and these private
 %% types need to be included in the beam and documentation.
-   case sets:is_element({Name, Arity}, ExpFuns) orelse State#docs.export_all of
+   case is_exported({Name, Arity}, State) of
       true ->
          add_user_types(Anno, SpecTypes, State);
       false ->
@@ -982,18 +984,16 @@ add_last_read_user_type(_Anno, {_TypeName, TypeDef, TypeArgs}, State) ->
 %% NOTE: Terminal elements for the documentation, such as `-type`, `-opaque`, `-callback`,
 %%       and functions always need to reset the state when they finish, so that new
 %%       new AST items start with a clean slate.
-extract_documentation_from_funs({function, Anno, F, A, [{clause, _, ClauseArgs, _, _}]},
-                      #docs{exported_functions = ExpFuns}=State) ->
-    case (sets:is_element({F, A}, ExpFuns) orelse State#docs.export_all) of
+extract_documentation_from_funs({function, Anno, F, A, [{clause, _, ClauseArgs, _, _}]}, State) ->
+    case is_exported({F, A}, State) of
        true ->
           gen_doc_with_signature({function, Anno, F, A, ClauseArgs}, State);
        false ->
           reset_state(State)
     end;
-extract_documentation_from_funs({function, _Anno0, F, A, _Body}=AST,
-                                #docs{exported_functions=ExpFuns}=State) ->
+extract_documentation_from_funs({function, _Anno0, F, A, _Body}=AST, State) ->
    {Doc1, Anno1} = fetch_doc_and_anno(State, AST),
-   case sets:is_element({F, A}, ExpFuns) orelse State#docs.export_all of
+   case is_exported({F, A}, State) of
       true ->
          {Signature, DocsWithoutSignature} = extract_signature(Doc1, State, F, A),
          AttrBody = {function, F, A},
