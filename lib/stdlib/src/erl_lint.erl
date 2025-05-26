@@ -371,17 +371,17 @@ format_error_1({deprecated, MFA, String, Rel}) ->
 format_error_1({deprecated, MFA, String}) when is_list(String) ->
     {~"~s is deprecated; ~s", [format_mfa(MFA), String]};
 format_error_1({deprecated_type, {M1, F1, A1}, String, Rel}) ->
-    {~"the type ~p:~p~s is deprecated and will be removed in ~s; ~s",
-                  [M1, F1, gen_type_paren(A1), Rel, String]};
+    {~"the type ~p:~p/~p is deprecated and will be removed in ~s; ~s",
+                  [M1, F1, A1, Rel, String]};
 format_error_1({deprecated_type, {M1, F1, A1}, String}) when is_list(String) ->
-    {~"the type ~p:~p~s is deprecated; ~s",
-                  [M1, F1, gen_type_paren(A1), String]};
+    {~"the type ~p:~p/~p is deprecated; ~s",
+                  [M1, F1, A1, String]};
 format_error_1({deprecated_callback, {M1, F1, A1}, String, Rel}) ->
-    {~"the callback ~p:~p~s is deprecated and will be removed in ~s; ~s",
-                  [M1, F1, gen_type_paren(A1), Rel, String]};
+    {~"the callback ~p:~p/~p is deprecated and will be removed in ~s; ~s",
+                  [M1, F1, A1, Rel, String]};
 format_error_1({deprecated_callback, {M1, F1, A1}, String}) when is_list(String) ->
-    {~"the callback ~p:~p~s is deprecated; ~s",
-                  [M1, F1, gen_type_paren(A1), String]};
+    {~"the callback ~p:~p/~p is deprecated; ~s",
+                  [M1, F1, A1, String]};
 format_error_1({removed, MFA, ReplacementMFA, Rel}) ->
     {~"call to ~s will fail, since it was removed in ~s; use ~s",
      [format_mfa(MFA), Rel, format_mfa(ReplacementMFA)]};
@@ -540,18 +540,18 @@ format_error_1({bad_export_type, _ETs}) ->
 format_error_1({duplicated_export_type, {T, A}}) ->
     {~"type ~tw/~w already exported", [T, A]};
 format_error_1({undefined_type, {TypeName, Arity}}) ->
-    {~"type ~tw~s undefined", [TypeName, gen_type_paren(Arity)]};
+    {~"type ~tw/~p undefined", [TypeName, Arity]};
 format_error_1({unused_type, {TypeName, Arity}}) ->
-    {~"type ~tw~s is unused", [TypeName, gen_type_paren(Arity)]};
+    {~"type ~tw/~p is unused", [TypeName, Arity]};
 format_error_1({redefine_builtin_type, {TypeName, Arity}}) ->
-    {~"local redefinition of built-in type: ~w~s",
-		  [TypeName, gen_type_paren(Arity)]};
+    {~"local redefinition of built-in type: ~w/~p",
+		  [TypeName, Arity]};
 format_error_1({renamed_type, OldName, NewName}) ->
     {~"type ~w() is now called ~w(); please use the new name instead",
      [OldName, NewName]};
 format_error_1({redefine_type, {TypeName, Arity}}) ->
-    {~"type ~tw~s already defined",
-     [TypeName, gen_type_paren(Arity)]};
+    {~"type ~tw/~p already defined",
+     [TypeName, Arity]};
 format_error_1({type_syntax, Constr}) ->
     {~"bad ~tw type", [Constr]};
 format_error_1(old_abstract_code) ->
@@ -598,8 +598,8 @@ format_error_1(deprecated_catch) ->
      warnings in selected modules.
      """;
  format_error_1({not_exported_opaque, {TypeName, Arity}}) ->
-    {~"opaque type ~tw~s is not exported",
-                  [TypeName, gen_type_paren(Arity)]};
+    {~"opaque type ~tw/~p is not exported",
+                  [TypeName, Arity]};
 format_error_1({bad_dialyzer_attribute,Term}) ->
     {~"badly formed dialyzer attribute: ~tw", [Term]};
 format_error_1({bad_dialyzer_option,Term}) ->
@@ -607,13 +607,6 @@ format_error_1({bad_dialyzer_option,Term}) ->
 %% --- obsolete? unused? ---
 format_error_1({format_error, {Fmt, Args}}) ->
     {Fmt, Args}.
-
-gen_type_paren(Arity) when is_integer(Arity), Arity >= 0 ->
-    gen_type_paren_1(Arity, ")").
-
-gen_type_paren_1(0, Acc) -> "(" ++ Acc;
-gen_type_paren_1(1, Acc) -> "(_" ++ Acc;
-gen_type_paren_1(N, Acc) -> gen_type_paren_1(N - 1, ",_" ++ Acc).
 
 format_mfa({M, F, [_|_]=As}) ->
     ","++ArityString = lists:append([[$,|integer_to_list(A)] || A <- As]),
@@ -629,7 +622,7 @@ format_mf(M, F, ArityString) when is_atom(M), is_atom(F) ->
     atom_to_list(M) ++ ":" ++ atom_to_list(F) ++ "/" ++ ArityString.
 
 format_mna({M, N, A}) when is_integer(A) ->
-    atom_to_list(M) ++ ":" ++ atom_to_list(N) ++ gen_type_paren(A).
+    format_mf(M, N, integer_to_list(A)).
 
 format_where(L) when is_integer(L) ->
     io_lib:format("(line ~p)", [L]);
