@@ -269,4 +269,4 @@ is_exit_bif(erlang, exit, 1) -> true;
 is_exit_bif(erlang, throw, 1) -> true;
 is_exit_bif(erlang, error, 1) -> true;
 is_exit_bif(erlang, error, 2) -> true;
-is_exit_bif(_, _, _) -> false.
+is_exit_bif(_, _, _) -> undefined.
