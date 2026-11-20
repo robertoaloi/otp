@@ -90,6 +90,7 @@
 %%     put_tuple as literals cannot be updated in-place.
 
 -module(beam_ssa_destructive_update).
+-typing([eqwalizer]).
 -moduledoc false.
 
 -export([opt/2]).
